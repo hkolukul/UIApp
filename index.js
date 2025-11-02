@@ -11,7 +11,7 @@ console.log(firstName + ' ' + last_name);
 
 // Data Types: string, number, boolean, undefined, null
 
-// Initialize dataLayer for Google Analytics tracking
+// Initialize dataLayer for analytics tracking
 window.dataLayer = window.dataLayer || [];
 
 // Helper function to push events to dataLayer
@@ -19,44 +19,212 @@ function gtag() {
     dataLayer.push(arguments);
 }
 
+// Adobe Web SDK Integration Functions
+function sendToAdobe(eventData) {
+    if (typeof alloy !== 'undefined') {
+        // Map dataLayer event to Adobe XDM format
+        const xdmData = mapToXDM(eventData);
+        
+        alloy("sendEvent", {
+            "xdm": xdmData,
+            "data": {
+                "customData": eventData // Send original data as well
+            }
+        }).then(function(response) {
+            console.log('Adobe Event Sent Successfully:', response);
+        }).catch(function(error) {
+            console.error('Adobe Event Send Error:', error);
+        });
+    } else {
+        console.warn('Adobe Web SDK not loaded yet, queuing event:', eventData);
+        // Queue events for later sending if Adobe SDK isn't ready
+        window.adobeEventQueue = window.adobeEventQueue || [];
+        window.adobeEventQueue.push(eventData);
+    }
+}
+
+// Map dataLayer events to Adobe XDM Schema
+function mapToXDM(eventData) {
+    const timestamp = new Date().toISOString();
+    const baseXDM = {
+        "timestamp": timestamp,
+        "eventType": getAdobeEventType(eventData.event),
+        "web": {
+            "webPageDetails": {
+                "URL": window.location.href,
+                "name": document.title,
+                "pageViews": {
+                    "value": eventData.event === 'page_view' ? 1 : 0
+                }
+            },
+            "webReferrer": {
+                "URL": document.referrer
+            }
+        },
+        "device": {
+            "screenHeight": screen.height,
+            "screenWidth": screen.width
+        },
+        "environment": {
+            "browserDetails": {
+                "userAgent": navigator.userAgent,
+                "viewportHeight": window.innerHeight,
+                "viewportWidth": window.innerWidth
+            }
+        }
+    };
+
+    // Add event-specific XDM mappings
+    switch(eventData.event) {
+        case 'page_view':
+            return {
+                ...baseXDM,
+                "web": {
+                    ...baseXDM.web,
+                    "webPageDetails": {
+                        ...baseXDM.web.webPageDetails,
+                        "siteSection": eventData.page_id,
+                        "server": window.location.hostname
+                    }
+                },
+                "_experience": {
+                    "analytics": {
+                        "customDimensions": {
+                            "eVars": {
+                                "eVar1": eventData.page_id,
+                                "eVar2": eventData.page_title
+                            }
+                        }
+                    }
+                }
+            };
+
+        case 'click':
+            return {
+                ...baseXDM,
+                "eventType": "web.webinteraction.linkClicks",
+                "web": {
+                    ...baseXDM.web,
+                    "webInteraction": {
+                        "name": eventData.element_name,
+                        "type": "other",
+                        "linkClicks": {
+                            "value": 1
+                        }
+                    }
+                },
+                "_experience": {
+                    "analytics": {
+                        "customDimensions": {
+                            "eVars": {
+                                "eVar3": eventData.element_type,
+                                "eVar4": eventData.element_name,
+                                "eVar5": eventData.page_id
+                            }
+                        },
+                        "event1to100": {
+                            "event1": {
+                                "value": 1
+                            }
+                        }
+                    }
+                }
+            };
+
+        case 'form_interaction':
+            return {
+                ...baseXDM,
+                "eventType": "web.formFilledOut",
+                "_experience": {
+                    "analytics": {
+                        "customDimensions": {
+                            "eVars": {
+                                "eVar6": eventData.form_name,
+                                "eVar7": eventData.form_action,
+                                "eVar8": eventData.page_id
+                            }
+                        },
+                        "event1to100": {
+                            "event2": {
+                                "value": 1
+                            }
+                        }
+                    }
+                }
+            };
+
+        default:
+            return baseXDM;
+    }
+}
+
+// Get Adobe event type from dataLayer event
+function getAdobeEventType(eventName) {
+    const eventTypeMap = {
+        'page_view': 'web.webpagedetails.pageViews',
+        'click': 'web.webinteraction.linkClicks',
+        'form_interaction': 'web.formFilledOut',
+        'scroll': 'web.webinteraction.linkClicks'
+    };
+    
+    return eventTypeMap[eventName] || 'web.webinteraction.linkClicks';
+}
+
 // Track page views
 function trackPageView(pageId, pageName) {
-    // Push page view event to dataLayer
-    dataLayer.push({
+    const eventData = {
         'event': 'page_view',
         'page_id': pageId,
         'page_title': pageName || pageId,
         'page_location': window.location.href,
         'timestamp': new Date().toISOString()
-    });
+    };
+    
+    // Push to dataLayer
+    dataLayer.push(eventData);
+    
+    // Send to Adobe Experience Platform
+    sendToAdobe(eventData);
     
     console.log(`DataLayer: Page view tracked for ${pageId}`);
 }
 
 // Track click events
 function trackClick(elementType, elementName, pageId, additionalData = {}) {
-    dataLayer.push({
+    const eventData = {
         'event': 'click',
         'element_type': elementType,
         'element_name': elementName,
         'page_id': pageId,
         'click_timestamp': new Date().toISOString(),
         ...additionalData
-    });
+    };
+    
+    // Push to dataLayer
+    dataLayer.push(eventData);
+    
+    // Send to Adobe Experience Platform
+    sendToAdobe(eventData);
     
     console.log(`DataLayer: Click tracked - ${elementType}: ${elementName} on ${pageId}`);
 }
 
 // Track form interactions
 function trackFormEvent(action, formName, pageId, formData = {}) {
-    dataLayer.push({
+    const eventData = {
         'event': 'form_interaction',
         'form_action': action,
         'form_name': formName,
         'page_id': pageId,
         'form_timestamp': new Date().toISOString(),
         ...formData
-    });
+    };
+    
+    // Push to dataLayer
+    dataLayer.push(eventData);
+    
+    // Send to Adobe Experience Platform
+    sendToAdobe(eventData);
     
     console.log(`DataLayer: Form ${action} tracked for ${formName} on ${pageId}`);
 }
@@ -360,14 +528,20 @@ function setupScrollTracking() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Multi-page website loaded successfully!');
     
+    // Initialize Adobe Web SDK when ready
+    initializeAdobeSDK();
+    
     // Track initial page load
-    dataLayer.push({
+    const pageLoadEvent = {
         'event': 'page_loaded',
         'page_load_time': new Date().toISOString(),
         'user_agent': navigator.userAgent,
         'screen_resolution': `${screen.width}x${screen.height}`,
         'viewport_size': `${window.innerWidth}x${window.innerHeight}`
-    });
+    };
+    
+    dataLayer.push(pageLoadEvent);
+    sendToAdobe(pageLoadEvent);
     
     // Add smooth scrolling effect when switching pages
     const pages = document.querySelectorAll('.page');
@@ -394,4 +568,58 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('DataLayer tracking initialized successfully!');
 });
+
+// Initialize Adobe Web SDK and process queued events
+function initializeAdobeSDK() {
+    // Wait for Adobe Web SDK to be available
+    const checkAdobe = setInterval(function() {
+        if (typeof alloy !== 'undefined') {
+            clearInterval(checkAdobe);
+            console.log('Adobe Web SDK is ready');
+            
+            // Process any queued events
+            if (window.adobeEventQueue && window.adobeEventQueue.length > 0) {
+                console.log(`Processing ${window.adobeEventQueue.length} queued Adobe events`);
+                window.adobeEventQueue.forEach(eventData => {
+                    sendToAdobe(eventData);
+                });
+                window.adobeEventQueue = [];
+            }
+            
+            // Send identity information
+            alloy("setConsent", {
+                consent: [{
+                    standard: "Adobe",
+                    version: "2.0",
+                    value: {
+                        collect: {
+                            val: "y"
+                        }
+                    }
+                }]
+            });
+            
+            // Optional: Set user identity if available
+            // alloy("sendEvent", {
+            //     "xdm": {
+            //         "identityMap": {
+            //             "Email": [{
+            //                 "id": "user@example.com",
+            //                 "primary": true
+            //             }]
+            //         }
+            //     }
+            // });
+            
+        }
+    }, 100);
+    
+    // Stop checking after 10 seconds
+    setTimeout(function() {
+        clearInterval(checkAdobe);
+        if (typeof alloy === 'undefined') {
+            console.warn('Adobe Web SDK failed to load within 10 seconds');
+        }
+    }, 10000);
+}
 
