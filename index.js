@@ -11,6 +11,171 @@ console.log(firstName + ' ' + last_name);
 
 // Data Types: string, number, boolean, undefined, null
 
+// File Logging System for Browser
+const Logger = {
+    logs: [],
+    maxLogs: 10000, // Limit to prevent memory issues
+    fileHandle: null, // Store file handle for persistent writing
+    logFilePath: 'adobe-analytics.log', // Default log file name
+    
+    log: function(message, level = 'DEBUG') {
+        const timestamp = new Date().toISOString();
+        const logEntry = `[${timestamp}] [${level}] ${message}`;
+        
+        this.logs.push(logEntry);
+        
+        // Keep only the last maxLogs entries
+        if (this.logs.length > this.maxLogs) {
+            this.logs.shift();
+        }
+        
+        // Also log to console for development
+        console.log(logEntry);
+        
+        // Auto-write to file if enabled
+        this.writeToFile(logEntry);
+    },
+    
+    info: function(message) {
+        this.log(message, 'INFO');
+    },
+    
+    warn: function(message) {
+        this.log(message, 'WARN');
+    },
+    
+    error: function(message) {
+        this.log(message, 'ERROR');
+    },
+    
+    debug: function(message) {
+        this.log(message, 'DEBUG');
+    },
+    
+    getLogsAsString: function() {
+        return this.logs.join('\n');
+    },
+    
+    // Initialize file access for logging to UIapp directory
+    initFileAccess: async function() {
+        try {
+            // Check if File System Access API is supported
+            if ('showSaveFilePicker' in window) {
+                // Request access to save file in UIapp directory
+                const options = {
+                    suggestedName: this.logFilePath,
+                    types: [{
+                        description: 'Log Files',
+                        accept: { 'text/plain': ['.log'] }
+                    }]
+                };
+                
+                this.fileHandle = await window.showSaveFilePicker(options);
+                this.log('File access initialized: ' + this.logFilePath, 'INFO');
+                
+                // Write existing logs to file
+                await this.flushLogsToFile();
+                return true;
+            } else {
+                this.warn('File System Access API not supported. Using fallback download method.');
+                return false;
+            }
+        } catch (e) {
+            this.error('Failed to initialize file access: ' + e.message);
+            return false;
+        }
+    },
+    
+    // Write a single log entry to file
+    writeToFile: async function(logEntry) {
+        if (!this.fileHandle) {
+            return; // Silently skip if no file handle
+        }
+        
+        try {
+            const writable = await this.fileHandle.createWritable({ keepExistingData: true });
+            await writable.seek((await this.fileHandle.getFile()).size); // Append to end
+            await writable.write(logEntry + '\n');
+            await writable.close();
+        } catch (e) {
+            // Don't log errors here to avoid infinite loop
+            console.error('Failed to write to log file:', e.message);
+        }
+    },
+    
+    // Flush all accumulated logs to file
+    flushLogsToFile: async function() {
+        if (!this.fileHandle) {
+            this.warn('No file handle available. Call initFileAccess() first.');
+            return;
+        }
+        
+        try {
+            const writable = await this.fileHandle.createWritable();
+            await writable.write(this.getLogsAsString() + '\n');
+            await writable.close();
+            this.log('Flushed ' + this.logs.length + ' logs to file', 'INFO');
+        } catch (e) {
+            this.error('Failed to flush logs to file: ' + e.message);
+        }
+    },
+    
+    // Fallback: Download logs as file
+    downloadLogs: function(filename = 'adobe-analytics.log') {
+        const logContent = this.getLogsAsString();
+        const blob = new Blob([logContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        this.log('Log file downloaded: ' + filename, 'INFO');
+    },
+    
+    clearLogs: function() {
+        this.logs = [];
+        this.log('Logs cleared', 'INFO');
+    },
+    
+    autoSave: function(intervalMinutes = 5) {
+        setInterval(async () => {
+            if (this.logs.length > 0) {
+                // Save to file if available
+                if (this.fileHandle) {
+                    await this.flushLogsToFile();
+                } else {
+                    // Fallback to localStorage
+                    try {
+                        localStorage.setItem('adobe_analytics_logs', JSON.stringify(this.logs));
+                        this.log('Logs auto-saved to localStorage', 'DEBUG');
+                    } catch (e) {
+                        this.error('Failed to auto-save logs: ' + e.message);
+                    }
+                }
+            }
+        }, intervalMinutes * 60 * 1000);
+    },
+    
+    loadFromStorage: function() {
+        try {
+            const savedLogs = localStorage.getItem('adobe_analytics_logs');
+            if (savedLogs) {
+                this.logs = JSON.parse(savedLogs);
+                this.log('Loaded ' + this.logs.length + ' logs from localStorage', 'INFO');
+            }
+        } catch (e) {
+            this.error('Failed to load logs from storage: ' + e.message);
+        }
+    }
+};
+
+// Initialize logger
+Logger.loadFromStorage();
+Logger.autoSave(5); // Auto-save every 5 minutes
+
 // Initialize dataLayer for analytics tracking
 window.dataLayer = window.dataLayer || [];
 
@@ -24,19 +189,44 @@ function sendToAdobe(eventData) {
     if (typeof alloy !== 'undefined') {
         // Map dataLayer event to Adobe XDM format
         const xdmData = mapToXDM(eventData);
+        Logger.debug('Sending to Adobe XDM: ' + JSON.stringify(xdmData));
+        Logger.debug('Original Event Data: ' + JSON.stringify(eventData));
+        // Send event to Adobe Experience Platform
+        Logger.info('➡️ Calling alloy("sendEvent") - waiting for response...');
         
-        alloy("sendEvent", {
-            "xdm": xdmData,
-            "data": {
-                "customData": eventData // Send original data as well
+        try {
+            const sendPromise = alloy("sendEvent", {
+                "xdm": xdmData,
+                "data": {
+                    "customData": eventData // Send original data as well
+                }
+            });
+            
+            Logger.debug('alloy() returned: ' + (sendPromise ? typeof sendPromise : 'undefined'));
+            
+            if (sendPromise && typeof sendPromise.then === 'function') {
+                sendPromise.then(function(response) {
+                    Logger.info('✅ Adobe Event Sent Successfully!');
+                    Logger.debug('Adobe Response: ' + JSON.stringify(response));
+                }).catch(function(error) {
+                    Logger.error('❌ Adobe Event Send Error!');
+                    Logger.error('Error details: ' + (error ? JSON.stringify(error) : 'No error object'));
+                    if (error && error.message) {
+                        Logger.error('Error message: ' + error.message);
+                    }
+                    if (error && error.stack) {
+                        Logger.error('Stack trace: ' + error.stack);
+                    }
+                });
+            } else {
+                Logger.warn('⚠️ alloy() did not return a promise - Adobe SDK may not be properly configured');
             }
-        }).then(function(response) {
-            console.log('Adobe Event Sent Successfully:', response);
-        }).catch(function(error) {
-            console.error('Adobe Event Send Error:', error);
-        });
+        } catch (error) {
+            Logger.error('❌ Exception calling alloy(): ' + error.message);
+            Logger.error('Stack: ' + error.stack);
+        }
     } else {
-        console.warn('Adobe Web SDK not loaded yet, queuing event:', eventData);
+        Logger.info('Adobe Web SDK not loaded yet, queuing event: ' + JSON.stringify(eventData));
         // Queue events for later sending if Adobe SDK isn't ready
         window.adobeEventQueue = window.adobeEventQueue || [];
         window.adobeEventQueue.push(eventData);
@@ -186,7 +376,7 @@ function trackPageView(pageId, pageName) {
     // Send to Adobe Experience Platform
     sendToAdobe(eventData);
     
-    console.log(`DataLayer: Page view tracked for ${pageId}`);
+    Logger.info(`DataLayer: Page view tracked for ${pageId}`);
 }
 
 // Track click events
@@ -206,7 +396,7 @@ function trackClick(elementType, elementName, pageId, additionalData = {}) {
     // Send to Adobe Experience Platform
     sendToAdobe(eventData);
     
-    console.log(`DataLayer: Click tracked - ${elementType}: ${elementName} on ${pageId}`);
+    Logger.info(`DataLayer: Click tracked - ${elementType}: ${elementName} on ${pageId}`);
 }
 
 // Track form interactions
@@ -226,7 +416,7 @@ function trackFormEvent(action, formName, pageId, formData = {}) {
     // Send to Adobe Experience Platform
     sendToAdobe(eventData);
     
-    console.log(`DataLayer: Form ${action} tracked for ${formName} on ${pageId}`);
+    Logger.info(`DataLayer: Form ${action} tracked for ${formName} on ${pageId}`);
 }
 
 // Multi-page navigation functionality with dataLayer tracking
@@ -271,7 +461,7 @@ function showPage(pageId) {
     
     trackPageView(pageId, pageNames[pageId]);
     
-    console.log(`Navigated to ${pageId} page`);
+    Logger.info(`Navigated to ${pageId} page`);
 }
 
 // Handle navigation clicks with dataLayer tracking
@@ -390,7 +580,7 @@ function submitForm() {
     document.getElementById('subject').value = '';
     document.getElementById('message').value = '';
     
-    console.log('Form submitted:', { name, email, subject, message });
+    Logger.info('Form submitted: ' + JSON.stringify({ name, email, subject, message }));
 }
 
 // Email validation function
@@ -526,7 +716,7 @@ function setupScrollTracking() {
 
 // Add some interactive features with dataLayer tracking
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Multi-page website loaded successfully!');
+    Logger.info('Multi-page website loaded successfully!');
     
     // Initialize Adobe Web SDK when ready
     initializeAdobeSDK();
@@ -566,7 +756,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize scroll tracking (optional)
     setupScrollTracking();
     
-    console.log('DataLayer tracking initialized successfully!');
+    Logger.info('DataLayer tracking initialized successfully!');
+    
+    // Add download logs button to page
+    addLogDownloadButton();
 });
 
 // Initialize Adobe Web SDK and process queued events
@@ -575,11 +768,11 @@ function initializeAdobeSDK() {
     const checkAdobe = setInterval(function() {
         if (typeof alloy !== 'undefined') {
             clearInterval(checkAdobe);
-            console.log('Adobe Web SDK is ready');
+            Logger.info('Adobe Web SDK is ready');
             
             // Process any queued events
             if (window.adobeEventQueue && window.adobeEventQueue.length > 0) {
-                console.log(`Processing ${window.adobeEventQueue.length} queued Adobe events`);
+                Logger.info(`Processing ${window.adobeEventQueue.length} queued Adobe events`);
                 window.adobeEventQueue.forEach(eventData => {
                     sendToAdobe(eventData);
                 });
@@ -618,8 +811,58 @@ function initializeAdobeSDK() {
     setTimeout(function() {
         clearInterval(checkAdobe);
         if (typeof alloy === 'undefined') {
-            console.warn('Adobe Web SDK failed to load within 10 seconds');
+            Logger.warn('Adobe Web SDK failed to load within 10 seconds');
         }
     }, 10000);
 }
+
+// Add button to download logs
+function addLogDownloadButton() {
+    // Create button container
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.bottom = '20px';
+    container.style.right = '20px';
+    container.style.zIndex = '9999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '10px';
+    
+    // Setup File Logging button
+    const setupButton = document.createElement('button');
+    setupButton.textContent = '📁 Setup File Logging';
+    setupButton.className = 'btn';
+    setupButton.style.backgroundColor = '#0066cc';
+    setupButton.style.boxShadow = '0 4px 6px rgba(0,0,0,0.2)';
+    
+    setupButton.onclick = async function() {
+        const success = await Logger.initFileAccess();
+        if (success) {
+            setupButton.textContent = '✅ File Logging Active';
+            setupButton.style.backgroundColor = '#28a745';
+            setupButton.disabled = true;
+            Logger.info('File logging initialized - logs will be saved to UIapp/adobe-analytics.log');
+        }
+    };
+    
+    // Download button (fallback)
+    const downloadButton = document.createElement('button');
+    downloadButton.textContent = '📥 Download Logs';
+    downloadButton.className = 'btn';
+    downloadButton.style.backgroundColor = '#04AA6D';
+    downloadButton.style.boxShadow = '0 4px 6px rgba(0,0,0,0.2)';
+    
+    downloadButton.onclick = function() {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        Logger.downloadLogs(`adobe-analytics-${timestamp}.log`);
+    };
+    
+    container.appendChild(setupButton);
+    container.appendChild(downloadButton);
+    document.body.appendChild(container);
+    Logger.info('Log management buttons added to page');
+}
+
+// Expose Logger globally for debugging
+window.Logger = Logger;
 
