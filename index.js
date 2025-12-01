@@ -1,6 +1,6 @@
 // My first JS code
 console.log('Good Morning Guys!');
-let myName = 'Hari';
+let myName = 'Hello';
 console.log(myName);
 
 // Variable can not start with number, should not contain space or - special characters
