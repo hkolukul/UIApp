@@ -1,6 +1,6 @@
 // My first JS code
 console.log('Good Morning Guys!');
-let myName = 'Hari';
+let myName = 'Hello';
 console.log(myName);
 
 // Variable can not start with number, should not contain space or - special characters
@@ -189,6 +189,15 @@ function sendToAdobe(eventData) {
     if (typeof alloy !== 'undefined') {
         // Map dataLayer event to Adobe XDM format
         const xdmData = mapToXDM(eventData);
+        
+        // Push complete XDM data to dataLayer for visibility
+        const completeDataLayerEvent = {
+            ...eventData,
+            xdm: xdmData,
+            adobe_formatted: true
+        };
+        dataLayer.push(completeDataLayerEvent);
+        
         Logger.debug('Sending to Adobe XDM: ' + JSON.stringify(xdmData));
         Logger.debug('Original Event Data: ' + JSON.stringify(eventData));
         // Send event to Adobe Experience Platform
@@ -370,10 +379,10 @@ function trackPageView(pageId, pageName) {
         'timestamp': new Date().toISOString()
     };
     
-    // Push to dataLayer
+    // Push simple data to dataLayer first
     dataLayer.push(eventData);
     
-    // Send to Adobe Experience Platform
+    // Send to Adobe Experience Platform (will also push XDM format to dataLayer)
     sendToAdobe(eventData);
     
     Logger.info(`DataLayer: Page view tracked for ${pageId}`);
@@ -390,10 +399,10 @@ function trackClick(elementType, elementName, pageId, additionalData = {}) {
         ...additionalData
     };
     
-    // Push to dataLayer
+    // Push simple data to dataLayer first
     dataLayer.push(eventData);
     
-    // Send to Adobe Experience Platform
+    // Send to Adobe Experience Platform (will also push XDM format to dataLayer)
     sendToAdobe(eventData);
     
     Logger.info(`DataLayer: Click tracked - ${elementType}: ${elementName} on ${pageId}`);
@@ -410,10 +419,10 @@ function trackFormEvent(action, formName, pageId, formData = {}) {
         ...formData
     };
     
-    // Push to dataLayer
+    // Push simple data to dataLayer first
     dataLayer.push(eventData);
     
-    // Send to Adobe Experience Platform
+    // Send to Adobe Experience Platform (will also push XDM format to dataLayer)
     sendToAdobe(eventData);
     
     Logger.info(`DataLayer: Form ${action} tracked for ${formName} on ${pageId}`);
