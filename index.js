@@ -245,13 +245,19 @@ function sendToAdobe(eventData) {
 // Map dataLayer events to Adobe XDM Schema
 function mapToXDM(eventData) {
     const timestamp = new Date().toISOString();
+    
+    // Get page name from digitalData if available
+    const pageName = (window.digitalData && window.digitalData.page.pageInfo.pageName) || 
+                     eventData.page_id || 
+                     document.title;
+    
     const baseXDM = {
         "timestamp": timestamp,
         "eventType": getAdobeEventType(eventData.event),
         "web": {
             "webPageDetails": {
                 "URL": window.location.href,
-                "name": document.title,
+                "name": pageName,
                 "pageViews": {
                     "value": eventData.event === 'page_view' ? 1 : 0
                 }
@@ -371,15 +377,19 @@ function getAdobeEventType(eventName) {
 
 // Track page views
 function trackPageView(pageId, pageName) {
+    // Update digitalData with current page info (simple structure)
+    if (window.digitalData) {
+        window.digitalData.page.pageInfo.pageName = pageId;
+        window.digitalData.page.pageInfo.pageTitle = pageName || pageId;
+    }
+    
+    // Push simple event to dataLayer
     const eventData = {
         'event': 'page_view',
         'page_id': pageId,
-        'page_title': pageName || pageId,
-        'page_location': window.location.href,
-        'timestamp': new Date().toISOString()
+        'page_title': pageName || pageId
     };
     
-    // Push simple data to dataLayer first
     dataLayer.push(eventData);
     
     // Send to Adobe Experience Platform (will also push XDM format to dataLayer)
@@ -390,12 +400,12 @@ function trackPageView(pageId, pageName) {
 
 // Track click events
 function trackClick(elementType, elementName, pageId, additionalData = {}) {
+    // Keep event data simple and focused
     const eventData = {
         'event': 'click',
         'element_type': elementType,
         'element_name': elementName,
         'page_id': pageId,
-        'click_timestamp': new Date().toISOString(),
         ...additionalData
     };
     
@@ -410,12 +420,12 @@ function trackClick(elementType, elementName, pageId, additionalData = {}) {
 
 // Track form interactions
 function trackFormEvent(action, formName, pageId, formData = {}) {
+    // Keep form events simple
     const eventData = {
         'event': 'form_interaction',
         'form_action': action,
         'form_name': formName,
         'page_id': pageId,
-        'form_timestamp': new Date().toISOString(),
         ...formData
     };
     
@@ -730,13 +740,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Adobe Web SDK when ready
     initializeAdobeSDK();
     
-    // Track initial page load
+    // Track initial page load with simple event
     const pageLoadEvent = {
         'event': 'page_loaded',
-        'page_load_time': new Date().toISOString(),
-        'user_agent': navigator.userAgent,
-        'screen_resolution': `${screen.width}x${screen.height}`,
-        'viewport_size': `${window.innerWidth}x${window.innerHeight}`
+        'page_name': window.digitalData ? window.digitalData.page.pageInfo.pageName : 'unknown'
     };
     
     dataLayer.push(pageLoadEvent);

@@ -1,45 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Google Tag Manager -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Multi-Page App</title>
+    
+    <!-- Preconnect and DNS-Prefetch to improve page load time -->
+    <link rel="preconnect" href="https://edge.adobedc.net" crossorigin>
+    <link rel="dns-prefetch" href="https://edge.adobedc.net">
+    <link rel="preconnect" href="https://assets.adobedtm.com">
+    <link rel="dns-prefetch" href="https://assets.adobedtm.com">
+    <!-- /Preconnect and DNS-Prefetch -->
+    
+    <!-- Data Layer - Define BEFORE all tag management code -->
     <script>
-        // Initialize dataLayer before GTM
+        /**
+         * Simple Data Layer following Adobe Customer Experience Digital Data Layer 1.0
+         * Keep it simple and focused on essential page attributes
+         */
+        window.digitalData = {
+            page: {
+                pageInfo: {
+                    pageName: "home",
+                    pageTitle: "Home Page",
+                    siteSection: "main",
+                    language: "en-US"
+                },
+                category: {
+                    primaryCategory: "homepage"
+                }
+            },
+            user: {
+                profile: {
+                    profileInfo: {
+                        returningStatus: "new"
+                    }
+                }
+            },
+            version: "1.0"
+        };
+        
+        // Initialize event dataLayer array for GTM/custom events
         window.dataLayer = window.dataLayer || [];
         
-        // Optional: Replace 'GTM-XXXXXXX' with your actual GTM container ID
-        // (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-        // new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-        // j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-        // 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-        // })(window,document,'script','dataLayer','GTM-XXXXXXX');
-        
-        console.log('DataLayer initialized:', window.dataLayer);
+        console.log('Data Layer initialized:', window.digitalData);
     </script>
-    <!-- End Google Tag Manager -->
+    <!-- /Data Layer -->
     
-    <!-- Adobe Web SDK Configuration -->
+    <!-- Pre-hiding snippet for Adobe Target (prevents content flicker) -->
     <script>
-        // Adobe Web SDK Configuration
+        (function(g,b,d,f){
+            (function(a,c,d){
+                if(a){
+                    var e=b.createElement("style");
+                    e.id=c;
+                    e.innerHTML=d;
+                    a.appendChild(e)
+                }
+            })(b.getElementsByTagName("head")[0],"at-body-style",d);
+            setTimeout(function(){
+                var a=b.getElementsByTagName("head")[0];
+                if(a){
+                    var c=b.getElementById("at-body-style");
+                    c&&a.removeChild(c)
+                }
+            },f)
+        })(window,document,"body {opacity: 0 !important}",3000);
+    </script>
+    <!-- /Pre-hiding snippet -->
+    
+    <!-- Adobe Web SDK Base Code -->
+    <script>
+        // Adobe Web SDK loader
         !function(n,o){o.forEach(function(o){n[o]||((n.__alloyNS=n.__alloyNS||[]).push(o),n[o]=function(){var u=arguments;return new Promise(function(i,l){n[o].q.push([i,l,u])})},n[o].q=[])})}(window,["alloy"]);
         
         // Configure Adobe Web SDK
         alloy("configure", {
-            "datastreamId": "c9ca84ae-c831-4fdc-bc6e-355d0144ed8e", // Replace with your actual datastream ID
-            "orgId": "86707EAF5E578E210A495EC0@AdobeOrg", // Replace with your Adobe Org ID
-            "debugEnabled": true, // Set to false in production
+            "datastreamId": "c9ca84ae-c831-4fdc-bc6e-355d0144ed8e",
+            "orgId": "86707EAF5E578E210A495EC0@AdobeOrg",
+            "debugEnabled": true,
             "defaultConsent": "in",
-            "context": ["web", "device", "environment", "placeContext"]
+            "context": ["web", "device", "environment", "placeContext"],
+            "prehidingStyle": "body {opacity: 0 !important}",
+            "edgeBasePath": ""
         });
         
         console.log('Adobe Web SDK configured');
     </script>
+    <!-- /Adobe Web SDK -->
     
-    <!-- Adobe Launch (Legacy) - Can be removed once Web SDK is fully implemented -->
+    <!-- Adobe Launch (Tags) - Load after data layer and Web SDK config -->
     <script src="https://assets.adobedtm.com/e1761e0ccef8/795d473f6525/launch-6429c8f7ab1b.min.js" async></script>
-    
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Multi-Page App</title>
+    <!-- /Adobe Launch -->
     <style>
         body {
             font-family: Arial, sans-serif;
