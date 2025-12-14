@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Adobe Web SDK Demo</title>
+    
+    <!-- Preconnect for Adobe Experience Platform Edge Network -->
+    <link rel="preconnect" href="//edge.adobedc.net">
+    <link rel="dns-prefetch" href="//edge.adobedc.net">
+    
+    <!-- Initialize dataLayer before any tracking code -->
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        
+        // Keep legacy digitalData for backward compatibility
+        var digitalData = {
+            "page": {
+                "pageInfo": {
+                    "pageName": "Home"
+                }
+            }
+        };
+        
+        console.log('DataLayer initialized:', window.dataLayer);
+    </script>
+    
+    <!-- Adobe Web SDK Configuration -->
+    <script>
+        // Initialize Alloy namespace
+        !function(n,o){o.forEach(function(o){n[o]||((n.__alloyNS=n.__alloyNS||[]).push(o),n[o]=function(){var u=arguments;return new Promise(function(i,l){n[o].q.push([i,l,u])})},n[o].q=[])})}(window,["alloy"]);
+        
+        // Configure Adobe Web SDK with your datastream
+        alloy("configure", {
+            "datastreamId": "c9ca84ae-c831-4fdc-bc6e-355d0144ed8e", // Replace with your datastream ID
+            "orgId": "86707EAF5E578E210A495EC0@AdobeOrg", // Replace with your Adobe Org ID
+            "debugEnabled": true,
+            "defaultConsent": "in",
+            "context": ["web", "device", "environment", "placeContext"],
+            "prehidingStyle": "body { opacity: 0 !important }", // Built-in Target prehiding
+            "targetMigrationEnabled": true // Enable if migrating from at.js
+        });
+        
+        console.log('Adobe Web SDK configured');
+    </script>
+    
+    <!-- Adobe Launch (Optional - can coexist with Web SDK or be removed) -->
+    <script src="https://assets.adobedtm.com/e1761e0ccef8/795d473f6525/launch-6429c8f7ab1b.min.js" async></script>
+    
+    <!-- jQuery or other helper libraries -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+</head>
+<body>
+    <h1>Adobe Web SDK Demo</h1>
+    <p>This page demonstrates Adobe Experience Platform Web SDK integration</p>
+    
+    <button id="trackButton" class="btn">Click to Track Event</button>
+    
+    <script>
+        // Send page view to Adobe Experience Platform
+        function sendPageView() {
+            alloy("sendEvent", {
+                "xdm": {
+                    "eventType": "web.webpagedetails.pageViews",
+                    "web": {
+                        "webPageDetails": {
+                            "URL": window.location.href,
+                            "name": digitalData.page.pageInfo.pageName,
+                            "pageViews": {
+                                "value": 1
+                            }
+                        }
+                    },
+                    "_experience": {
+                        "analytics": {
+                            "customDimensions": {
+                                "eVars": {
+                                    "eVar1": digitalData.page.pageInfo.pageName
+                                }
+                            }
+                        }
+                    }
+                },
+                "data": {
+                    "digitalData": digitalData
+                }
+            }).then(function(result) {
+                console.log('✅ Page view sent to Adobe Experience Platform', result);
+            }).catch(function(error) {
+                console.error('❌ Error sending page view:', error);
+            });
+        }
+        
+        // Send click event to Adobe
+        function trackButtonClick() {
+            // Push to dataLayer
+            dataLayer.push({
+                event: 'button_click',
+                button_name: 'Track Event Button',
+                page_name: digitalData.page.pageInfo.pageName
+            });
+            
+            // Send to Adobe with XDM
+            alloy("sendEvent", {
+                "xdm": {
+                    "eventType": "web.webinteraction.linkClicks",
+                    "web": {
+                        "webInteraction": {
+                            "name": "Track Event Button",
+                            "type": "other",
+                            "linkClicks": {
+                                "value": 1
+                            }
+                        }
+                    },
+                    "_experience": {
+                        "analytics": {
+                            "event1to100": {
+                                "event1": {
+                                    "value": 1
+                                }
+                            }
+                        }
+                    }
+                }
+            }).then(function(result) {
+                console.log('✅ Button click sent to Adobe', result);
+                alert('Event tracked! Check console for details.');
+            }).catch(function(error) {
+                console.error('❌ Error tracking click:', error);
+            });
+        }
+        
+        // Wait for page load and send page view
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, sending page view to Adobe...');
+            sendPageView();
+            
+            // Attach click handler
+            document.getElementById('trackButton').addEventListener('click', trackButtonClick);
+            
+            // Set consent
+            alloy("setConsent", {
+                consent: [{
+                    standard: "Adobe",
+                    version: "2.0",
+                    value: {
+                        collect: {
+                            val: "y"
+                        }
+                    }
+                }]
+            });
+        });
+    </script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        .btn {
+            background-color: #04AA6D;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background-color: #038557;
+        }
+    </style>
+</body>
+</html>
